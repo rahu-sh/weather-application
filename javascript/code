@@ -1,0 +1,173 @@
+
+const API_BASE = 'https://api.openweathermap.org/data/2.5';
+const msgEl = id('msg');
+const resultEl = id('result');
+const currentEl = id('current');
+const forecastEl = id('forecast');
+
+document.addEventListener('DOMContentLoaded', init);
+
+function id(s){ return document.getElementById(s); }
+
+function init(){
+  id('saveKeyBtn').addEventListener('click', saveKey);
+  id('removeKeyBtn').addEventListener('click', removeKey);
+  id('searchBtn').addEventListener('click', searchCity);
+  id('geoBtn').addEventListener('click', useGeolocation);
+  id('clearBtn').addEventListener('click', clearResult);
+
+  const existing = localStorage.getItem('owm_api_key');
+  if(existing) id('apikeyInput').value = existing;
+}
+
+function showMsg(text, timeout=4000){
+  msgEl.textContent = text;
+  msgEl.classList.remove('hidden');
+  setTimeout(()=> msgEl.classList.add('hidden'), timeout);
+}
+
+function saveKey(){
+  const k = id('apikeyInput').value.trim();
+  if(!k){ showMsg('Please paste a valid API key'); return; }
+  localStorage.setItem('owm_api_key', k);
+  showMsg('API key saved in your browser.');
+}
+function removeKey(){
+  localStorage.removeItem('owm_api_key');
+  id('apikeyInput').value = '';
+  showMsg('API key removed from localStorage.');
+}
+
+function getKey(){
+  return localStorage.getItem('owm_api_key') || id('apikeyInput').value.trim();
+}
+
+async function searchCity(){
+  const city = id('cityInput').value.trim();
+  if(!city){ showMsg('Type a city name'); return; }
+  const key = getKey();
+  if(!key){ showMsg('Please provide API key first'); return; }
+  await fetchByCity(city, key);
+}
+
+async function useGeolocation(){
+  const key = getKey();
+  if(!key){ showMsg('Please provide API key first'); return; }
+  if(!navigator.geolocation){ showMsg('Geolocation not supported'); return; }
+  showMsg('Getting location...', 2000);
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const {latitude, longitude} = pos.coords;
+    await fetchByCoords(latitude, longitude, key);
+  }, err=>{
+    showMsg('Could not get location: ' + err.message);
+  });
+}
+
+function clearResult(){
+  resultEl.classList.add('hidden');
+  currentEl.innerHTML = '';
+  forecastEl.innerHTML = '';
+}
+
+async function fetchByCity(city, key){
+  try{
+    showMsg('Loading...', 2000);
+    const url = `${API_BASE}/weather?q=${encodeURIComponent(city)}&units=metric&appid=${key}`;
+    const r = await fetch(url);
+    if(!r.ok) throw r;
+    const data = await r.json();
+    const {coord} = data;
+    await fetchCompleteAndRender(coord.lat, coord.lon, key, data.name);
+  }catch(err){
+    handleFetchError(err);
+  }
+}
+
+async function fetchByCoords(lat, lon, key){
+  try{
+    showMsg('Loading...', 2000);
+    const r = await fetch(`${API_BASE}/weather?lat=${lat}&lon=${lon}&units=metric&appid=${key}`);
+    if(!r.ok) throw r;
+    const data = await r.json();
+    await fetchCompleteAndRender(lat, lon, key, data.name);
+  }catch(err){
+    handleFetchError(err);
+  }
+}
+
+// fetch current + short forecast and render
+async function fetchCompleteAndRender(lat, lon, key, placeName){
+  try{
+    // current already available via /weather but we'll call /weather for latest
+    const currentResp = await fetch(`${API_BASE}/weather?lat=${lat}&lon=${lon}&units=metric&appid=${key}`);
+    if(!currentResp.ok) throw currentResp;
+    const current = await currentResp.json();
+
+    // short forecast: 5 day / 3 hour. We'll pick next 8 entries (~24h).
+    const fResp = await fetch(`${API_BASE}/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${key}`);
+    if(!fResp.ok) throw fResp;
+    const fData = await fResp.json();
+    const next8 = fData.list.slice(0, 8); // next ~24 hours
+
+    render(current, next8, placeName);
+  }catch(err){
+    handleFetchError(err);
+  }
+}
+
+function render(current, forecastList, placeName){
+  resultEl.classList.remove('hidden');
+  currentEl.innerHTML = '';
+
+  // current block
+  const icon = current.weather?.[0]?.icon;
+  const iconUrl = icon ? `https://openweathermap.org/img/wn/${icon}@2x.png` : '';
+  const temp = Math.round(current.main?.temp);
+  const desc = current.weather?.[0]?.description || '';
+  const humidity = current.main?.humidity;
+  const wind = current.wind?.speed;
+
+  const html = `
+    <img src="${iconUrl}" alt="${desc}" onerror="this.style.display='none'"/>
+    <div class="weather-info">
+      <div class="temp">${temp}°C</div>
+      <div class="desc">${desc}</div>
+      <div class="muted">${placeName || current.name}, ${current.sys?.country || ''}</div>
+      <div class="muted">Humidity: ${humidity}% • Wind: ${wind} m/s</div>
+    </div>
+  `;
+  currentEl.innerHTML = html;
+
+  // forecast cards
+  forecastEl.innerHTML = '';
+  forecastList.forEach(item=>{
+    const dt = new Date(item.dt * 1000);
+    const hours = dt.getHours().toString().padStart(2,'0');
+    const readable = `${hours}:00`;
+    const t = Math.round(item.main.temp);
+    const ic = item.weather?.[0]?.icon;
+    const icUrl = ic ? `https://openweathermap.org/img/wn/${ic}.png` : '';
+    const card = document.createElement('div');
+    card.className = 'f-card';
+    card.innerHTML = `
+      <div><strong>${readable}</strong></div>
+      <div><img src="${icUrl}" alt="" /></div>
+      <div>${t}°C</div>
+      <div class="muted" style="font-size:0.85rem">${item.weather?.[0]?.description}</div>
+    `;
+    forecastEl.appendChild(card);
+  });
+}
+
+function handleFetchError(err){
+  if(err && err.status === 401){
+    showMsg('Invalid API key. Get a key from openweathermap.org and save it.');
+    return;
+  }
+  if(err && err.status === 404){
+    showMsg('Location not found. Check the city name.');
+    return;
+  }
+  showMsg('Network or API error. Check console for details.');
+  console.error(err);
+}
