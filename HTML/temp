@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Weather App</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Weather Now 🌤️</h1>
+
+    <div id="apikeyArea" class="card small">
+      <label for="apikeyInput"><strong>OpenWeatherMap API Key</strong></label>
+      <input id="apikeyInput" type="text" placeholder="Paste your API key here" />
+      <div class="row">
+        <button id="saveKeyBtn">Save key</button>
+        <button id="removeKeyBtn" class="secondary">Remove key</button>
+      </div>
+      <p class="muted">We store the key in your browser only (localStorage). See README for safer production options.</p>
+    </div>
+
+    <div class="card search">
+      <input id="cityInput" type="text" placeholder="Enter city (e.g., Mumbai)" />
+      <div class="row">
+        <button id="searchBtn">Search</button>
+        <button id="geoBtn" class="secondary">Use my location</button>
+      </div>
+    </div>
+
+    <div id="result" class="card hidden">
+      <button id="clearBtn" class="x">✕</button>
+      <div id="current" class="weather-block"></div>
+      <h3>Forecast (next 24h)</h3>
+      <div id="forecast" class="forecast-grid"></div>
+    </div>
+
+    <div id="msg" class="card muted hidden"></div>
+
+    <footer class="muted small">Built for demo • Data from OpenWeatherMap</footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
